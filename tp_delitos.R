@@ -1,32 +1,68 @@
 library(data.table)
 library(tidyverse)
-library(xlsx)
-library(readxl)
 library(sf)
-
 library(ggplot2)
 library(dplyr)
 library(viridis)
 library(ggpointdensity)
-
-setwd("C:/Users/20332842324/Desktop/delitos")
-
-file_list <- list.files(path="C:/Users/20332842324/Desktop/delitos")
+library(data.table)
+library(ggmap)
 
 
-dataset <- data.frame()
+delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv")
+delitos_geo <- delitos %>% 
+  filter(!is.na(longitud), !is.na(latitud)) %>%
+  filter(longitud != 0) %>% 
+  st_as_sf(coords = c("longitud", "latitud"), crs = 4326)
 
-#had to specify columns to get rid of the total column
-for (i in 1:length(file_list)){
-  temp_data <- read_excel(file_list[i], range = cell_cols("A:K")) #each file will be read in, specify which columns you need read in to avoid any errors
-  temp_data$Class <- sapply(strsplit(gsub(".xlsx", "", file_list[i]), "_"), function(x){x[2]}) #clean the data as needed, in this case I am creating a new column that indicates which file each row of data came from
-  dataset <- rbind(dataset, temp_data) #for each iteration, bind the new data to the building dataset
-}
+colnames(delitos_geo)
+unique(delitos_geo$tipo_delito)
+
+delitos_geo_robo <- delitos_geo %>% 
+  filter(tipo_delito =="Robo (Con violencia)")
+
+bbox <- c(-58.546686, #Asignar coordenadas de los límites del bounding box de la Ciudad
+          -34.711145,
+          -58.329097,
+          -34.529156)
+
+CABA <- get_stamenmap(bbox = bbox, #Descargar mapa
+                      maptype = "toner-lite",
+                      zoom=13)
 
 
-write.csv(dataset,"C:/Users/20332842324/Desktop/delitos/delitos.csv",fileEncoding = 'UTF-8')
+ggmap(CABA) +
+  geom_bin2d(data = filter(delitos,tipo_delito=="Lesiones Seg Vial"),
+             aes(x = longitud, y = latitud), bins = 100, alpha = 0.8) +
+  labs(title="Distribución de delitos",
+       subtitle="Ciudad Autónoma de Buenos Aires",
+       x="",
+       y="",
+       caption= "Fuente de datos: https://https://mapa.seguridadciudad.gob.ar/",
+       fill="Cantidad")+
+  scale_fill_distiller(palette = "Spectral")+
+  theme_void()
 
-delitos<-dataset
+ggmap(CABA) +
+  stat_density_2d(data = delitos, 
+                  aes(x = longitud, y = latitud, 
+                      fill = stat(level)), alpha = 0.6, geom = "polygon") +
+  labs(title="Distribución de delitos",
+       subtitle="Ciudad Autónoma de Buenos Aires",
+       x="",
+       y="",
+       caption= "Fuente de datos: https://data.buenosaires.gob.ar/",
+       fill="Nivel")+
+  scale_fill_distiller(palette = "Spectral")+
+  theme_void()+
+  facet_wrap(~tipo_delito)
+
+calles <- read_sf("C:/Users/20332842324/Desktop/callejero.shp")
+
+
+#Cantidad por barrios
+#
+
 
 comisarias<-read.csv("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/comisarias-policia-de-la-ciudad/comisarias-policia-de-la-ciudad.csv")
 
@@ -34,10 +70,6 @@ comisarias <- comisarias %>%
   filter(!is.na(long), !is.na(lat)) %>% 
   st_as_sf(coords = c("long", "lat"), crs = 4326)
 
-delitos <- delitos %>% 
-  filter(!is.na(LONGITUD), !is.na(LATITUD)) %>%
-  filter(LONGITUD != 0) %>% 
-  st_as_sf(coords = c("LONGITUD", "LATITUD"), crs = 4326)
 
 
 barrios <- read_sf("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/barrios/barrios.geojson")
@@ -55,3 +87,5 @@ ggplot(data = dat, mapping = aes(x = x, y = y)) +
          scale_color_viridis()       
 
 https://github.com/LKremer/ggpointdensity
+https://datanerdses.org/2019/08/29/resumen-del-encuentro-data-nerds-es-ago-2019-ppts-codigo-r/
+  http://rpubs.com/angiescetta/actividad-comercial
