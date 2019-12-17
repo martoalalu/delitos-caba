@@ -8,7 +8,7 @@ library(ggpointdensity)
 library(data.table)
 library(ggmap)
 library(janitor)
-
+library(ggdark)
 
 delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv")
 delitos_geo <- delitos %>% 
@@ -83,6 +83,7 @@ delitos_barrio <- delitos %>%
 barrios <- barrios %>% 
   left_join(delitos_barrio)
 
+#Agregamos cantidad de delitos por habitante
 barrios <- barrios %>% 
   mutate(delitos_hab=cant_delitos/poblacion_barrio)
 
@@ -95,19 +96,86 @@ ggplot() +
   scale_fill_viridis_c(alpha = 0.9)
 
 
-calles <- read_sf("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/calles/callejero.geojson")
-calles_delitos <- st_join(calles, delitos_geo)
+calles2 <- read_sf("C:/Users/20332842324/Desktop/callejero.shp")
+
+#Paso a misma proyección que delitos
+calles <- st_transform(calles2,crs = 4326)
+
+#Nos quedamos con los delitos de caba
+delitos_caba <- delitos_geo[st_within(delitos_geo, barrios) %>% lengths > 0,]
+
+#Chequeo coordenadas
+st_crs(calles)
+st_crs(delitos_caba)
 
 ggplot()+
-  geom_sf(data = callejero_usos_suelo, aes(color=pct_com_g), alpha = 0.9)+
+  geom_sf(data = calles[200:230,], alpha = 0)+
   labs(title = "Uso comercial por cada cuadra",
        subtitle="Ciudad Autónoma de Buenos Aires",
        color = "Porcentaje (%)",
-       caption= "Fuente de datos: https://data.buenosaires.gob.ar/")+
-  scale_color_distiller(palette = "Spectral")+
-  theme_caba
+       caption= "Fuente de datos: https://mapa.seguridadciudad.gob.ar/")
+
+#Unimos la calle mas cercana al delito
+calles_delitos <- st_join(delitos_caba, calles, join = st_nearest_feature)
+
+View(head(calles_delitos))
+
+#cantidad de delitos por calle
+calles_delitos_q <- calles_delitos %>% 
+  group_by(id.y) %>%
+  summarise(cant_delitos=n())
+
+st_geometry(calles_delitos_q) <- NULL
+
+#Renombramos para poder hacer el join
+calles_delitos_q <- calles_delitos_q %>% 
+  rename(id=id.y)
+
+calles <- left_join(calles,calles_delitos_q)
+
+ggplot()+
+  geom_histogram(data=calles,aes(x=cant_delitos))
+
+calles <- calles %>% 
+  mutate(cant_delitos_log=log(cant_delitos))
+
+ggplot()+
+  geom_histogram(data=calles,aes(x=cant_delitos_log))
 
 
+ggplot()+
+  geom_sf(data = calles, aes(color=cant_delitos_log), size=0.7)+
+  labs(title = "Cantidad de delitos por calle",
+       subtitle="Ciudad Autónoma de Buenos Aires",
+       caption= "Fuente de datos: https://mapa.seguridadciudad.gob.ar/")+
+  scale_colour_viridis_c(option="inferno",guide=FALSE)+
+  dark_theme_void()
+
+calles <- arrange(calles,desc(cant_delitos))
+
+
+
+
+
+ggplot(data=calles[1:30,],
+       aes(x=reorder(nomoficial, cant_delitos),
+           y=cant_delitos,
+           fill=factor(nomoficial)))+
+  geom_bar(width=0.75,
+           stat='identity',
+           position='stack')+
+  geom_text(size=3.5,aes(x = nomoficial, 
+                         y = cant_delitos , label = cant_delitos))+
+  coord_flip() +
+  labs(title = "20 rubros con mayor cantidad de usos",
+       subtitle = "Ciudad Autónoma de Buenos Aires, 2017",
+       x = "Rubro",
+       y = "Cantidad",
+       fill = "Tipo de uso del suelo") +
+  guides(fill=FALSE)
+
+
+View(head(calles))
 
 comisarias<-read.csv("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/comisarias-policia-de-la-ciudad/comisarias-policia-de-la-ciudad.csv")
 
