@@ -122,7 +122,7 @@ View(head(calles_delitos))
 
 #cantidad de delitos por calle
 calles_delitos_q <- calles_delitos %>% 
-  group_by(id.y) %>%
+  group_by(id.y, nomoficial) %>%
   summarise(cant_delitos=n())
 
 st_geometry(calles_delitos_q) <- NULL
@@ -140,10 +140,6 @@ calles <- calles %>%
   mutate(cant_delitos_log=log(cant_delitos))
 
 ggplot()+
-  geom_histogram(data=calles,aes(x=cant_delitos_log))
-
-
-ggplot()+
   geom_sf(data = calles, aes(color=cant_delitos_log), size=0.7)+
   labs(title = "Cantidad de delitos por calle",
        subtitle="Ciudad Autónoma de Buenos Aires",
@@ -151,28 +147,34 @@ ggplot()+
   scale_colour_viridis_c(option="inferno",guide=FALSE)+
   dark_theme_void()
 
-calles <- arrange(calles,desc(cant_delitos))
+ggplot()+
+  geom_histogram(data=calles,aes(x=cant_delitos_log))
 
 
+calles_delitos_q_unique <- calles_delitos_q %>% 
+  group_by(nomoficial) %>% 
+  summarise(total_delitos=sum(cant_delitos)) %>% 
+  arrange(desc(total_delitos))
 
 
-
-ggplot(data=calles[1:30,],
-       aes(x=reorder(nomoficial, cant_delitos),
-           y=cant_delitos,
+ggplot(data=calles_delitos_q_unique[1:30,],
+       aes(x=reorder(nomoficial, total_delitos),
+           y=total_delitos,
            fill=factor(nomoficial)))+
   geom_bar(width=0.75,
            stat='identity',
            position='stack')+
-  geom_text(size=3.5,aes(x = nomoficial, 
-                         y = cant_delitos , label = cant_delitos))+
+  geom_text(size=3.5, color="black",aes(x = nomoficial, 
+                         y = total_delitos + 400, label = total_delitos))+
   coord_flip() +
-  labs(title = "20 rubros con mayor cantidad de usos",
+  labs(title = "30 calles con mayor cantidad de delitos",
        subtitle = "Ciudad Autónoma de Buenos Aires, 2017",
-       x = "Rubro",
-       y = "Cantidad",
-       fill = "Tipo de uso del suelo") +
+       x = "Calle",
+       y = "Cantidad")+
   guides(fill=FALSE)
+
+
+geom_text(aes(label = y), position = position_nudge(y = -0.1))
 
 
 View(head(calles))
