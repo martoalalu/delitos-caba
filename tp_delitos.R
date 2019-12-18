@@ -10,10 +10,37 @@ library(ggmap)
 library(janitor)
 library(ggdark)
 library(leaflet)
+library(lubridate)
 
 delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv")
 delitos <- delitos %>% 
-  mutate(anio=year(fecha))
+  mutate(fecha=ymd(fecha)) %>% 
+  mutate(anio=year(fecha)) %>% 
+  mutate(anio_mes = floor_date(as_date(fecha), "month"))
+  
+#Cantidad de delitos por año y porcentaje
+delitos %>% 
+  count(anio) %>% 
+  mutate(pct=(n/sum(n))*100)
+
+#Evolucion de delitos y cantidad por año (barras)
+delitos %>% 
+  ggplot(aes(anio))+
+    geom_bar(aes(fill=as.factor(tipo_delito)))
+
+#Evolución lineas de delitos
+
+delitos %>% 
+  count(anio_mes,tipo_delito) %>% 
+  ggplot() +
+  geom_line(aes(x=anio_mes, y=n, color=tipo_delito))+
+  xlab("")
+  
+  
+#https://www.r-graph-gallery.com/279-plotting-time-series-with-ggplot2.html
+
+
+
 
 delitos_geo <- delitos %>% 
   filter(!is.na(longitud), !is.na(latitud)) %>%
@@ -193,13 +220,7 @@ ggplot(data=calles_delitos_q_unique[1:30,],
 View(head(delitos_caba))
 
 
-delitos_anio <- delitos %>% 
-  count(anio)
 
-delitos_anio <- delitos_anio %>% 
-  mutate(pct=n/sum(delitos_anio$n))
-
-delitos_anio
 
 
 

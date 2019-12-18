@@ -1,0 +1,70 @@
+---
+title: "Distribución espacial de delitos"
+author: "Marto"
+date: "18/12/2019"
+output:
+  html_document: 
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+## Delitos en la Ciudad de Buenos Aires
+
+En consonancia con la [política de datos abiertos](http://rpubs.com/martinalalu/centralidades-comerciales) la Ciudad de Buenos Aires comenzó a publicar información desagregada sobre distintos tipos de delitos en el [Mapa del Delito](https://mapa.seguridadciudad.gob.ar/). Los datos disponibles abarcan el período 2016-2018.
+
+El objetivo del presente trabajo será analizar la distribución espacial de los delitos en la Ciudad pudiendo identificar cómo éstos variaron (o no) a lo largo de los años, si hay diferencia entre los distintos tipos y barrios. Por último se llevará a cabo un [Test I de Moran](https://es.wikipedia.org/wiki/I_de_Moran) para poder medir la autocorrelación espacial de los delitos, es decir si su distribución es producto del azar o no; y por último se realizará un modelo de regersión simple para modelar la relación de los delitos con la distancia a las comisarías (en tanto elementos que teóricamente deberían disuadir la ocurrencia de delitos).
+
+Los datos fueron scrapeados del [Mapa del Delito](https://mapa.seguridadciudad.gob.ar/) y preprocesados para poder confeccionar el análisis.
+
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(viridis)
+library(ggpointdensity)
+library(data.table)
+library(ggmap)
+library(janitor)
+library(ggdark)
+library(leaflet)
+
+delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv")
+delitos <- delitos %>% 
+  mutate(anio=year(fecha))
+
+nrow(delitos)/(365*3)
+
+delitos %>% 
+  count(anio) %>% 
+  mutate(pct=(n/sum(n))*100)
+
+
+delitos %>% 
+  ggplot(aes(anio))+
+    geom_bar(aes(fill=as.factor(tipo_delito)))
+```
+
+En los 3 años se cometieron **350980 delitos**, un promedio de **320 por día**.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
