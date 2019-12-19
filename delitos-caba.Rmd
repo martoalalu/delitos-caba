@@ -38,10 +38,17 @@ library(lubridate)
 
 delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv",encoding = 'UTF-8')
 
+barrios_replace<- c("COGHLAND", "LA BOCA", "VILLA GRAL MITRE", "MONTSERRAT")
+
 delitos <- delitos %>% 
   mutate(fecha=ymd(fecha)) %>% 
   mutate(anio=year(fecha)) %>% 
-  mutate(anio_mes = floor_date(as_date(fecha), "month"))
+  mutate(anio_mes = floor_date(as_date(fecha), "month")) %>% 
+  mutate(barrio = case_when(grepl(paste(barrios_replace[1]), barrio) ~ "COGHLAN",
+                                 grepl(paste(barrios_replace[2]), barrio) ~ "BOCA",
+                                 grepl(paste(barrios_replace[3]), barrio) ~ "VILLA GRAL. MITRE",
+                                 grepl(paste(barrios_replace[4]), barrio) ~ "MONSERRAT",
+                                 TRUE~"OTROS"))
 
 nrow(delitos)/(365*3)
 
@@ -148,6 +155,7 @@ A diferencia del delito anterior "Hurto (sin violencia)" no tiene una distribuci
 Sigamos viendo patrones espaciales agregando los datos a nivel barrio.
 
 ```{r}
+
 #Poblacion por barrio
 barrios <- radios %>% 
   group_by(BARRIO) %>%
@@ -163,47 +171,31 @@ ggplot() +
        caption= "Fuente de datos: https://mapa.seguridadciudad.gob.ar/")+
   scale_fill_viridis_c(alpha = 0.9)
 
+delitos_caba_geo <- delitos_caba
+st_geometry(delitos_caba) <- NULL
+
 #Delitos por barrio
-delitos_barrio <- delitos %>% 
-  group_by(barrio) %>%
+delitos_barrio <- delitos_caba %>% 
+  group_by(barrio, tipo_delito) %>%
   summarise(cant_delitos=n())
 
-#Normalizo nombres para poder joinear
-delitos_barrio$barrio[10] <- "COGHLAN"
-delitos_barrio$barrio[15] <- "BOCA"
-delitos_barrio$barrio[19] <- "MONSERRAT"
-delitos_barrio$barrio[40] <- "VILLA GRAL. MITRE"
+delitos_barrio_robo <- filter(delitos_barrio, tipo_delito=="Robo (Con violencia)")
+delitos_barrio_hurto <- filter(delitos_barrio, tipo_delito=="Hurto (Sin violencia)")
 
-#Joineamos
-barrios <- barrios %>% 
-  left_join(delitos_barrio)
-
-#Agregamos cantidad de delitos por habitante
-barrios <- barrios %>% 
-  mutate(delitos_hab=cant_delitos/poblacion_barrio)
-
-ggplot() +
-  geom_sf(data = barrios, aes(fill = delitos_hab), color = NA) +
-  labs(title = "Delitos por habitante en barrios",
+#Joineamos robos, agregamos cantidad de delitos por habitante y mapeamos
+barrios %>% 
+  left_join(delitos_barrio_robo) %>% 
+  mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+  ggplot() +
+  geom_sf(aes(fill = delitos_hab), color = NA) +
+  labs(title = "Robos por cantidad de habitantes en barrios",
        subtitle="Ciudad Autónoma de Buenos Aires",
        fill = "Cantidad/hab",
        caption= "Fuente de datos: https://mapa.seguridadciudad.gob.ar/")+
   scale_fill_viridis_c(alpha = 0.9)+
   theme_void()
+  
 
-ggplot(data=barrios,aes(x=reorder(barrio, delitos_hab),
-           y=delitos_hab,
-           fill=delitos_hab))+
-  geom_bar(stat='identity',
-           position='stack')+ 
-  coord_flip()+
-  labs(title = "Delitos por habitante en barrios",
-       subtitle="Ciudad Autónoma de Buenos Aires",
-       x="Barrio",
-       y="Cantidad de delitos por habitante",
-       fill = "Cantidad/hab",
-       caption= "Fuente de datos: https://mapa.seguridadciudad.gob.ar/")+
-  scale_fill_viridis_c(alpha = 0.9)
 ```
 
 
