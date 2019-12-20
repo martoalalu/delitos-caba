@@ -48,7 +48,7 @@ delitos <- delitos %>%
                                  grepl(paste(barrios_replace[2]), barrio) ~ "BOCA",
                                  grepl(paste(barrios_replace[3]), barrio) ~ "VILLA GRAL. MITRE",
                                  grepl(paste(barrios_replace[4]), barrio) ~ "MONSERRAT",
-                                 TRUE~"OTROS"))
+                                 TRUE~barrio))
 
 nrow(delitos)/(365*3)
 
@@ -176,41 +176,129 @@ st_geometry(delitos_caba) <- NULL
 
 #Delitos por barrio
 delitos_barrio <- delitos_caba %>% 
-  group_by(barrio, tipo_delito) %>%
+  group_by(barrio, tipo_delito, anio) %>%
   summarise(cant_delitos=n())
 
 delitos_barrio_robo <- filter(delitos_barrio, tipo_delito=="Robo (Con violencia)")
 delitos_barrio_hurto <- filter(delitos_barrio, tipo_delito=="Hurto (Sin violencia)")
 
-#Joineamos robos, agregamos cantidad de delitos por habitante y mapeamos
-barrios %>% 
-  left_join(delitos_barrio_robo) %>% 
+ggpubr::ggarrange(ncol=3, nrow=1,
+  barrios %>% 
+  left_join(filter(delitos_barrio_robo, anio==2016)) %>% 
   mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
   ggplot() +
   geom_sf(aes(fill = delitos_hab), color = NA) +
-  labs(title = "Robos por cantidad de habitantes en barrios",
-       subtitle="Ciudad Autónoma de Buenos Aires",
-       fill = "Cantidad/hab",
-       caption= "Fuente de datos: https://mapa.seguridadciudad.gob.ar/")+
+  labs(title = "Robos 2016",
+       subtitle="CABA")+
   scale_fill_viridis_c(alpha = 0.9)+
-  theme_void()
+  theme_void()+
+  guides(fill=FALSE)
+  ,
+  
+  barrios %>% 
+    left_join(filter(delitos_barrio_robo, anio==2017)) %>% 
+    mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+    ggplot() +
+    geom_sf(aes(fill = delitos_hab), color = NA) +
+    labs(title = "Robos 2017",
+         subtitle="CABA")+
+    scale_fill_viridis_c(alpha = 0.9)+
+    theme_void()+
+    guides(fill=FALSE),
+  
+  barrios %>% 
+    left_join(filter(delitos_barrio_robo, anio==2018)) %>% 
+    mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+    ggplot() +
+    geom_sf(aes(fill = delitos_hab), color = NA) +
+    labs(title = "Robos 2018",
+         subtitle="CABA")+
+    scale_fill_viridis_c(alpha = 0.9)+
+    theme_void()+
+    guides(fill=FALSE)
+)
+
+ggpubr::ggarrange(ncol=3, nrow=1,
+  barrios %>% 
+  left_join(filter(delitos_barrio_hurto, anio==2016)) %>% 
+  mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+  ggplot() +
+  geom_sf(aes(fill = delitos_hab), color = NA) +
+  labs(title = "Hurtos 2016",
+       subtitle="CABA")+
+  scale_fill_viridis_c(alpha = 0.9)+
+  theme_void()+
+  guides(fill=FALSE)
+  ,
+  
+  barrios %>% 
+    left_join(filter(delitos_barrio_hurto, anio==2017)) %>% 
+    mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+    ggplot() +
+    geom_sf(aes(fill = delitos_hab), color = NA) +
+    labs(title = "Hurto 2017",
+         subtitle="CABA")+
+    scale_fill_viridis_c(alpha = 0.9)+
+    theme_void()+
+    guides(fill=FALSE),
+  
+  barrios %>% 
+    left_join(filter(delitos_barrio_hurto, anio==2018)) %>% 
+    mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+    ggplot() +
+    geom_sf(aes(fill = delitos_hab), color = NA) +
+    labs(title = "Hurto 2018",
+         subtitle="CABA")+
+    scale_fill_viridis_c(alpha = 0.9)+
+    theme_void()+
+    guides(fill=FALSE)
+)
+
   
 
 ```
 
+Al normalizar los delitos por la cantidad de habitantes de cada barrio vemos como en ambos casos San Nicolás es el barrio con mayores indices de inseguridad
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r cars}
-summary(cars)
+barrios %>% 
+  left_join(delitos_barrio_robo) %>% 
+  mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+  ggplot(aes(x=reorder(barrio, delitos_hab),
+           y=delitos_hab,
+           fill=factor(barrio)))+
+  geom_bar(width=0.75,
+           stat='identity',
+           position='stack')+
+  coord_flip() +
+  labs(title = "Robos por cantidad de habitante",
+       subtitle = "Ciudad Autónoma de Buenos Aires (2016-2019)",
+       x = "Barrio",
+       y = "Robos por habitante")+
+  guides(fill=FALSE)
+
+barrios %>% 
+  left_join(delitos_barrio_hurto) %>% 
+  mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
+  ggplot(aes(x=reorder(barrio, delitos_hab),
+           y=delitos_hab,
+           fill=factor(barrio)))+
+  geom_bar(width=0.75,
+           stat='identity',
+           position='stack')+
+  coord_flip() +
+  labs(title = "Hurtos por cantidad de habitante",
+       subtitle = "Ciudad Autónoma de Buenos Aires (2016-2019)",
+       x = "Barrio",
+       y = "Hurtos por habitante")+
+  guides(fill=FALSE)
 ```
 
 ## Including Plots
 
 You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
