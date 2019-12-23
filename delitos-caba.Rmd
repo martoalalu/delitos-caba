@@ -280,7 +280,7 @@ ggparcoord(delitos_barrio_robo %>%
   )  +
   geom_dl(aes(label = barrio), method = list(dl.trans(x = x + 0.2), "last.qp", cex = 0.8))
 
-ggparcoord(delitos_barrio_robo %>% 
+ggparcoord(delitos_barrio_hurto %>% 
              left_join(barrios) %>%
              mutate(delitos_hab=cant_delitos/poblacion_barrio) %>% 
              select(barrio, tipo_delito,anio,delitos_hab) %>% 
@@ -295,6 +295,7 @@ ggparcoord(delitos_barrio_robo %>%
     plot.title = element_text(size=10)
   )  +
   geom_dl(aes(label = barrio), method = list(dl.trans(x = x + 0.2), "last.qp", cex = 0.8))
+
 
 ```
 
