@@ -34,6 +34,9 @@ library(janitor)
 library(ggdark)
 library(leaflet)
 library(lubridate)
+library(GGally)
+library(directlabels)
+install.packages("directlabels")
 
 
 delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv",encoding = 'UTF-8')
@@ -51,6 +54,8 @@ delitos <- delitos %>%
                                  TRUE~barrio))
 
 nrow(delitos)/(365*3)
+
+delitos
 
 delitos %>% 
   count(anio) %>% 
@@ -259,9 +264,9 @@ ggpubr::ggarrange(ncol=3, nrow=1,
 
 ```
 
-Al normalizar los delitos por la cantidad de habitantes de cada barrio vemos como en ambos casos San Nicolás es el barrio con mayores indices de inseguridad.  
+Al normalizar los delitos por la cantidad de habitantes de cada barrio vemos como en ambos casos San Nicolás es el barrio con mayores indices de inseguridad. En el caso de Robos la diferencia con el segundo (Constitución) es de aproximadamente un 50%, mientras que en Hurtos la diferencia es de prácticamente el triple, con la diferencia de que el segundo es Monserrat (que en robos ocupaba el quinto lugar). Este dato igual podría estar sesgado por el hecho de que San Nicolás es un barrio con gran prevalencia de oficinas por sobre viviendas y es la zona con mayor transitabilidad de la Ciudad debido a la alta concentración de estaciones de subte y paradas de colectivo (Más info sobre movilidad en esta zona en [este artículo](http://rpubs.com/martinalalu/movilidad-urbana)  
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Otros datos que llaman la atención es el crecimiento de robos en el barrio de Puerto Madero, abandonando así el puesto del "más seguro de Buenos Aires", dejando ese lugar a Parque Chás. 
 
 ```{r cars}
 ggparcoord(delitos_barrio_robo %>% 
@@ -271,14 +276,14 @@ ggparcoord(delitos_barrio_robo %>%
              spread(anio, delitos_hab),
            columns = 3:5, groupColumn = 1,
            showPoints = TRUE, 
-           title = "Parallel Coordinate Plot for the Iris Data",
+           title = "Robos por cantidad de habitantes",
            alphaLines = 0.3,
            scale="globalminmax"
 ) + 
   theme(legend.position="none",
     plot.title = element_text(size=10)
-  )  +
-  geom_dl(aes(label = barrio), method = list(dl.trans(x = x + 0.2), "last.qp", cex = 0.8))
+  )+
+  geom_dl(aes(label = barrio), method = list(dl.trans(x = x + 0.2), cex = 0.8))
 
 ggparcoord(delitos_barrio_hurto %>% 
              left_join(barrios) %>%
@@ -287,7 +292,7 @@ ggparcoord(delitos_barrio_hurto %>%
              spread(anio, delitos_hab),
            columns = 3:5, groupColumn = 1,
            showPoints = TRUE, 
-           title = "Parallel Coordinate Plot for the Iris Data",
+           title = "Hurtos por cantidad de habitantes",
            alphaLines = 0.3,
            scale="globalminmax"
 ) + 
@@ -296,6 +301,119 @@ ggparcoord(delitos_barrio_hurto %>%
   )  +
   geom_dl(aes(label = barrio), method = list(dl.trans(x = x + 0.2), "last.qp", cex = 0.8))
 
+
+```
+
+Observar los centroides de los delitos puede ser útil también para evaluar desplazamientos de los delitos en cada uno de los barrios.
+
+```{r}
+robos_centroide <- delitos_caba %>%
+  filter(tipo_delito=="Robo (Con violencia)") %>% 
+  group_by(barrio,anio) %>% 
+  summarise(lat = mean(lat),long = mean(long))
+
+hurtos_centroide <- delitos_caba %>%
+  filter(tipo_delito=="Hurto (Sin violencia)") %>% 
+  group_by(barrio,anio) %>% 
+  summarise(lat = mean(lat),long = mean(long))
+
+ 
+
+
+pal <- colorFactor(c("navy", "red", "green"), domain = c("2016", "2017", "2018"))
+
+leaflet() %>% 
+  setView(lng = -58.446216, lat = -34.615766, zoom = 12) %>% 
+  addTiles() %>% 
+  addCircleMarkers(data=robos_centroide,
+    color = ~pal(anio),
+    stroke = FALSE, fillOpacity = 0.5, radius=5,popup=paste(robos_centroide$anio)) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addLegend("bottomright", 
+  colors =c("navy",  "red", "green"),
+  labels= c("2016", "2017","2018"),
+  title= "Centroide Robos Año",
+  opacity = 1)
+
+leaflet() %>% 
+  setView(lng = -58.446216, lat = -34.615766, zoom = 12) %>% 
+  addTiles() %>% 
+  addCircleMarkers(data=hurtos_centroide,
+    color = ~pal(anio),
+    stroke = FALSE, fillOpacity = 0.5, radius=5,popup=paste(hurtos_centroide$anio)) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addLegend("bottomright", 
+  colors =c("navy",  "red", "green"),
+  labels= c("2016", "2017","2018"),
+  title= "Centroide Hurtos Año",
+  opacity = 1)
+```
+
+En ambos casos el desplazamiento de los delitos fue prácticamente que insignifcante a lo largo de los años. De todos modos es algo que se puede profundizar analizando variación en términos de horarios o días.  
+
+# Calles
+
+Ahora bien, la distribución a nivel barrio nos da cierta información pero los datos nos permiten seguir bajando y explorar cómo se distribuyen puntualmente a nivel segmento de calle. Obtenemos los datos de las calles de la Ciudad de Buenos Aires nuevamente del portal de datos abiertos, [data.buenosaires.gob.ar](https://data.buenosaires.gob.ar/dataset/calles). Para poder hacer operaciones espaciales con el dataset de delitos lo pasamos a la misma proyección y agregamos una columna con la longitud (en metros) de cada segmento de calle para luego poder normalizar los datos.  
+
+```{r}
+calles <- read_sf("C:/Users/20332842324/Desktop/callejero.shp")
+
+#Paso a misma proyección que delitos
+calles <- st_transform(calles,crs = 4326)
+
+#Chequeamos coordenadas
+st_crs(calles)
+st_crs(delitos_caba_geo)
+
+#Calculamos el largo de cada calle en metros
+calles <- calles %>% 
+  mutate(largo=st_length(calles))
+
+#Unimos la calle mas cercana al delito
+calles_delitos <- st_join(delitos_caba_geo, calles, join = st_nearest_feature)
+
+#cantidad de delitos por calle
+calles_delitos_q <- calles_delitos %>% 
+  group_by(id.y, nomoficial, anio, tipo_delito) %>%
+  summarise(cant_delitos=n())
+
+st_geometry(calles_delitos_q) <- NULL
+
+calles_delitos_q <- spread(calles_delitos_q,anio,cant_delitos)
+
+#Renombramos para poder hacer el join
+calles_delitos_q <- calles_delitos_q %>% 
+  rename(id=id.y,
+         del_2016=`2016`,
+         del_2017=`2017`,
+         del_2018=`2018`)
+
+calles_robos_q <- filter(calles_delitos_q, tipo_delito=="Robo (Con violencia)")
+calles_hurtos_q <- filter(calles_delitos_q, tipo_delito=="Hurto (Sin violencia)")
+
+calles_robos <- calles %>% 
+  left_join(calles_robos_q) %>% 
+  mutate(del_2016_m=del_2016/largo,
+         del_2017_m=del_2017/largo,
+         del_2018_m=del_2018/largo)
+
+calles_hurtos <- calles %>% 
+  left_join(calles_hurtos_q) %>% 
+  mutate(del_2016_m=del_2016/largo,
+         del_2017_m=del_2017/largo,
+         del_2018_m=del_2018/largo)
+
+```
+
+Calculamos la cantidad de delitos por metro en cada segmento de calle según tipo de delito y año. Lo normalizamos porque hay segmentos de calle que son muy largos (por ejemplo autopistas) que pueden distorisionar los datos.
+
+```{r}
+binpal <- colorBin("viridis", calles_hurtos$del_2016_m, 6, pretty = FALSE)
+leaflet(calles_hurtos) %>% 
+  addProviderTiles(providers$CartoDB.DarkMatter) %>% 
+  addPolylines(color = ~binpal(del_2016_m), weight = 1.5, smoothFactor = 0.5, 
+               opacity = 1.0, fillOpacity = 0.65,highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                                                     bringToFront = TRUE))
 
 ```
 

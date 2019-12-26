@@ -191,6 +191,11 @@ leaflet(calles) %>%
                 bringToFront = TRUE))
 
 
+
+
+
+
+
 ggplot()+
   geom_histogram(data=calles,aes(x=cant_delitos_log))
 
