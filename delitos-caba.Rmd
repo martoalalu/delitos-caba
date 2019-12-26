@@ -393,25 +393,39 @@ calles_hurtos_q <- filter(calles_delitos_q, tipo_delito=="Hurto (Sin violencia)"
 
 calles_robos <- calles %>% 
   left_join(calles_robos_q) %>% 
-  mutate(del_2016_m=del_2016/largo,
-         del_2017_m=del_2017/largo,
-         del_2018_m=del_2018/largo)
+  mutate(del_2016_m=as.numeric(del_2016/largo),
+         del_2017_m=as.numeric(del_2017/largo),
+         del_2018_m=as.numeric(del_2018/largo),
+         del_m=as.numeric((del_2016+del_2017 + del_2018)/largo),
+         log_del_m=log(del_m))
 
 calles_hurtos <- calles %>% 
   left_join(calles_hurtos_q) %>% 
-  mutate(del_2016_m=del_2016/largo,
-         del_2017_m=del_2017/largo,
-         del_2018_m=del_2018/largo)
+  mutate(del_2016_m=as.numeric(del_2016/largo),
+         del_2017_m=as.numeric(del_2017/largo),
+         del_2018_m=as.numeric(del_2018/largo),
+         del_m=as.numeric((del_2016+del_2017 + del_2018)/largo),
+         log_del_m=log(del_m))
 
 ```
 
-Calculamos la cantidad de delitos por metro en cada segmento de calle según tipo de delito y año. Lo normalizamos porque hay segmentos de calle que son muy largos (por ejemplo autopistas) que pueden distorisionar los datos.
+Calculamos la cantidad de delitos por metro en cada segmento de calle según tipo de delito y año. Lo normalizamos porque hay segmentos de calle que son muy largos (por ejemplo autopistas) que pueden distorisionar los datos. Para simplificar el análisis veremos los datos agregados de los 3 años.  
+```{r}
+ggplot()+
+  geom_histogram(data=calles_hurtos,aes(x=del_m))
+```
+
+Para facilitar la visualización en el mapa lo pasamos a escala logaritmica y así suavizar su distribución. 
 
 ```{r}
-binpal <- colorBin("viridis", calles_hurtos$del_2016_m, 6, pretty = FALSE)
+ggplot()+
+  geom_histogram(data=calles_hurtos,aes(x=log_del_m))
+
+binpal <- colorBin("viridis", calles_hurtos$log_del_m, 6, pretty = FALSE)
+
 leaflet(calles_hurtos) %>% 
   addProviderTiles(providers$CartoDB.DarkMatter) %>% 
-  addPolylines(color = ~binpal(del_2016_m), weight = 1.5, smoothFactor = 0.5, 
+  addPolylines(color = ~binpal(log_del_m), weight = 1.5, smoothFactor = 0.5, 
                opacity = 1.0, fillOpacity = 0.65,highlightOptions = highlightOptions(color = "white", weight = 2,
                                                                                      bringToFront = TRUE))
 
