@@ -36,7 +36,7 @@ library(leaflet)
 library(lubridate)
 library(GGally)
 library(directlabels)
-install.packages("directlabels")
+
 
 
 delitos <- fread("https://raw.githubusercontent.com/martoalalu/delitos-caba/master/data/delitos.csv",encoding = 'UTF-8')
@@ -356,7 +356,7 @@ En ambos casos el desplazamiento de los delitos fue prácticamente que insignifc
 Ahora bien, la distribución a nivel barrio nos da cierta información pero los datos nos permiten seguir bajando y explorar cómo se distribuyen puntualmente a nivel segmento de calle. Obtenemos los datos de las calles de la Ciudad de Buenos Aires nuevamente del portal de datos abiertos, [data.buenosaires.gob.ar](https://data.buenosaires.gob.ar/dataset/calles). Para poder hacer operaciones espaciales con el dataset de delitos lo pasamos a la misma proyección y agregamos una columna con la longitud (en metros) de cada segmento de calle para luego poder normalizar los datos.  
 
 ```{r}
-calles <- read_sf("C:/Users/20332842324/Desktop/callejero.shp")
+calles <- read_sf("C:/Users/Marto/Desktop/callejero.shp")
 
 #Paso a misma proyección que delitos
 calles <- st_transform(calles,crs = 4326)
@@ -411,23 +411,299 @@ calles_hurtos <- calles %>%
 
 Calculamos la cantidad de delitos por metro en cada segmento de calle según tipo de delito y año. Lo normalizamos porque hay segmentos de calle que son muy largos (por ejemplo autopistas) que pueden distorisionar los datos. Para simplificar el análisis veremos los datos agregados de los 3 años.  
 ```{r}
+
+ggpubr::ggarrange(ncol=2, nrow=1,
 ggplot()+
-  geom_histogram(data=calles_hurtos,aes(x=del_m))
+  geom_histogram(data=calles_robos,aes(x=del_m))+
+  labs(title = "Delitos por metro 2016-2018",
+         subtitle="CABA"),
+
+ggplot()+
+  geom_histogram(data=calles_hurtos,aes(x=del_m))+
+  labs(title = "Hurtos por metro 2016-2018",
+         subtitle="CABA"))
 ```
 
 Para facilitar la visualización en el mapa lo pasamos a escala logaritmica y así suavizar su distribución. 
 
 ```{r}
+ggpubr::ggarrange(ncol=2, nrow=1,
 ggplot()+
-  geom_histogram(data=calles_hurtos,aes(x=log_del_m))
+  geom_histogram(data=calles_robos,aes(x=log_del_m))+
+  labs(title = "Delitos por metro 2016-2018 (log)",
+         subtitle="CABA"),
 
-binpal <- colorBin("viridis", calles_hurtos$log_del_m, 6, pretty = FALSE)
+ggplot()+
+  geom_histogram(data=calles_hurtos,aes(x=log_del_m))+
+  labs(title = "Hurtos por metro 2016-2018 (log)",
+         subtitle="CABA"))
 
-leaflet(calles_hurtos) %>% 
+```
+Ahora si pasamos al mapa de robos por metro cuadrado a nivel calle.
+
+```{r}
+binpal <- colorBin("viridis", calles_robos$log_del_m, 6, pretty = FALSE, na.color = "#000000")
+
+leaflet(calles_robos) %>% 
   addProviderTiles(providers$CartoDB.DarkMatter) %>% 
   addPolylines(color = ~binpal(log_del_m), weight = 1.5, smoothFactor = 0.5, 
-               opacity = 1.0, fillOpacity = 0.65,highlightOptions = highlightOptions(color = "white", weight = 2,
-                                                                                     bringToFront = TRUE))
+               opacity = 1.0, fillOpacity = 0.65,highlightOptions = highlightOptions(color = "white", weight = 2,bringToFront = TRUE),popup=paste(calles_robos$nom_oficial,"<br>", "Delitos por metro:",calles_robos$del_m))
+
 
 ```
 
+Como era de esperar el mapa refuerza al hallazgo anterior, de que los robos se concentran en la zona de Once y Microcentro y tienen cierta tendencia a desplazarse a través de las avenidas. Ahora bien estos datos nos permiten ver cuáles son las calles, o sus segmentos, con más delitos de la ciudad de acuerdo a su longitud.
+
+```{r}
+
+calles_robos_unique <- calles_robos %>% 
+  group_by(nomoficial) %>% 
+  summarise(total_delitos_m=sum(del_m)) %>% 
+  arrange(desc(total_delitos_m))
+
+
+ggplot(data=calles_robos_unique[1:10,],
+       aes(x=reorder(nomoficial, total_delitos_m),
+           y=total_delitos_m,
+           fill=factor(nomoficial)))+
+  geom_bar(width=0.75,
+           stat='identity',
+           position='stack')+
+  geom_text(size=3.5, color="black",aes(x = nomoficial, 
+                         y = total_delitos_m + 0.2, label = ceiling(total_delitos_m)))+
+  coord_flip() +
+  labs(title = "10 calles con mayor cantidad de robos por metro",
+       subtitle = "Ciudad Autónoma de Buenos Aires, 2016-2018",
+       x = "Calle",
+       y = "Robos")+
+  guides(fill=FALSE)
+  
+```
+
+Al agregar los datos de cantidad de robos por metro de cada segmento vemos como la tendencia se mantiene, pero permite profundizar aún más el análisis. Valentín Gómez (Once) y O´Brien (Constitución) son las calle con mayor cantidad de robos por metro, lo cual marca -en parte- cómo los delitos se trasladan a las adyacencias de las avenidas (Corrientes y Brasil en cada caso). 
+
+```{r}
+leaflet(calles_hurtos) %>% 
+  addProviderTiles(providers$CartoDB.DarkMatter) %>% 
+  addPolylines(color = ~binpal(log_del_m), weight = 1.5, smoothFactor = 0.5, 
+               opacity = 1.0, fillOpacity = 0.65,highlightOptions = highlightOptions(color = "white", weight = 2,bringToFront = TRUE),popup=paste(calles_hurtos$nom_oficial,"<br>", "Delitos por metro:",calles_hurtos$del_m))
+
+calles_hurtos_unique <- calles_hurtos %>% 
+  group_by(nomoficial) %>% 
+  summarise(total_delitos_m=sum(del_m)) %>% 
+  arrange(desc(total_delitos_m))
+
+ggplot(data=calles_hurtos_unique[1:10,],
+       aes(x=reorder(nomoficial, total_delitos_m),
+           y=total_delitos_m,
+           fill=factor(nomoficial)))+
+  geom_bar(width=0.75,
+           stat='identity',
+           position='stack')+
+  geom_text(size=3.5, color="black",aes(x = nomoficial, 
+                         y = total_delitos_m + 0.2, label = ceiling(total_delitos_m)))+
+  coord_flip() +
+  labs(title = "10 calles con mayor cantidad de hurtos por metro",
+       subtitle = "Ciudad Autónoma de Buenos Aires, 2016-2018",
+       x = "Calle",
+       y = "Hurtos")+
+  guides(fill=FALSE)
+```
+
+Al igual que con los robos el mapa de hurtos a nivel calle refuerza los hallazgos anteriores.
+Mientras que en las calles con mayor densidad de hurtos se destacan Benthlem en Plaza Dorrego, San Telmo, una zona de alta densidad turística y Discepolo, un pasaje a escasas cuadras de Callao y Corrientes y la calle Uruguay, también con alto caudal de personas en tránsito. 
+
+Al comparar ambos gráficos (robos y nurtos) hay varias calles que se repiten: O'Brien, Roffo, Bidegain y Tres Sargentos.
+
+# Autocorrelación espacial
+
+Algo sumamente interesante de saber es si los delitos tienen una distribución azarosa, aleatoria en el espacio o si tienen cierto patrón. 
+La aleatoriedad espacial se verifica si se cumplen 2 condiciones:
+
+- Todo evento tiene la misma probabilidad de ocurrir en cualquier ubicación (efecto de primer orden)
+- La ubicación de un evento es independiente de la ubicación de cualquier otro (efecto de segundo orden) 
+Para ello uno de los test que se suele realizar es el ["Test I de Moran"](https://es.wikipedia.org/wiki/I_de_Moran) el cual devuelve un resultado entre -1 y 1 indicando si la distribución de los elementos en el espacio está clusterizada, aleatorizada o dispersa. 
+
+En primer lugar creamos una grilla que cubre toda la Ciudad de Buenos Aires para luego contar la cantidad de delitos (robos y hurtos) que ocurren en cada lugar.
+
+```{r}
+caba <- st_read("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/perimetro/caba-perimetro.geojson")
+
+#Creamos grilla
+grilla<-st_make_grid(caba, cellsize = 0.003)
+
+
+#Vemos como queda
+ggplot() + 
+  geom_sf(data = caba, fill=NA)+
+  geom_sf(data=grilla, fill=NA)
+
+#Convertimos la grilla a objeto sf
+grilla <- st_sf(grilla)
+grilla <- mutate(grilla, id=seq(1,3960))
+
+grilla_caba <- st_intersection(grilla, caba)
+
+delitos_robo <- delitos_caba_geo %>% 
+  filter(tipo_delito =="Robo (Con violencia)")
+
+ggplot()+
+  geom_sf(data=grilla_caba)+
+  geom_sf(data=delitos_robo)
+
+delitos_robo <- delitos_robo %>%  
+  st_join(grilla_caba)
+
+delitos_robo_grilla <- delitos_robo %>% 
+  st_set_geometry(NULL) %>% 
+  group_by(id.y) %>% 
+  summarise(robos = n())
+
+
+ggplot() +
+  geom_histogram(data = delitos_robo_grilla, aes(robos))
+
+grilla_caba_robo <- grilla_caba %>% 
+  left_join(delitos_robo_grilla, by=c("id"="id.y"))
+
+grilla_caba_robo <- grilla_caba_robo %>% 
+  mutate(robo = ifelse(is.na(robos), 0, robos))
+
+plot(grilla_caba_robo["robo"], border = NA)
+
+ggplot()+
+  geom_sf(data=grilla_caba_robo, aes(fill=robo))
+```
+El mapa muestra la ya conocida distribución de los robos en la Ciudad. Hay muchas zonas que concentran una baja cantidad de robos y luego unas pocas con alta concentración (llegando a 1000). Ahora lo importante es saber si esta distribución es producto del azar o no, y para ello haremos el Test I de Morán.
+
+```{r}
+library(spdep)
+grilla_caba_robo <- st_as_sf(grilla_caba_robo)
+
+sp.matrix <- poly2nb(as(grilla_caba_robo, "Spatial"), queen=TRUE)
+summary(sp.matrix)
+sp.weights <- nb2listw(sp.matrix, style='W')
+
+moran.mc(grilla_caba_robo$robo, listw = sp.weights, nsim = 999)
+```
+
+El coeficiente que arrojó es 0.649, muy cercano a 1 lo cual implica que los robos en la Ciudad no están distribuidos aleatoriamente sino que hay cierto patrón, es decir que la ocurrencia de un robo no es igualmente probable en toda la Ciudad, hay lugares más propensos que otros y esto es estadísticamente significativo.  
+
+Ahora veamos si lo mismo ocurre con los hurtos.
+```{r}
+delitos_hurto <- delitos_caba_geo %>% 
+  filter(tipo_delito =="Hurto (Sin violencia)")
+
+ggplot()+
+  geom_sf(data=grilla_caba)+
+  geom_sf(data=delitos_hurto)
+
+delitos_hurto <- delitos_hurto %>%  
+  st_join(grilla_caba)
+
+delitos_hurto_grilla <- delitos_hurto %>% 
+  st_set_geometry(NULL) %>% 
+  group_by(id.y) %>% 
+  summarise(hurtos = n())
+
+
+ggplot() +
+  geom_histogram(data = delitos_hurto_grilla, aes(hurtos))
+
+grilla_caba_hurtos <- grilla_caba %>% 
+  left_join(delitos_hurto_grilla, by=c("id"="id.y"))
+
+grilla_caba_hurtos <- grilla_caba_hurtos %>% 
+  mutate(hurtos = ifelse(is.na(hurtos), 0, hurtos))
+
+plot(grilla_caba_hurtos["hurtos"], border = NA)
+
+ggplot()+
+  geom_sf(data=grilla_caba_hurtos, aes(fill=hurtos))
+```
+
+Nuevamente reforzando los hallazgos anteriores, con muchas zonas que concentran una baja cantidad de hurtos y luego unas pocas con alta concentración (llegando a 800). Al igual que con los robos corremos el Test I de Morán para ver si esta distribución es aleatoria o no.
+
+```{r}
+grilla_caba_hurtos <- st_as_sf(grilla_caba_hurtos)
+
+sp.matrix <- poly2nb(as(grilla_caba_hurtos, "Spatial"), queen=TRUE)
+summary(sp.matrix)
+sp.weights <- nb2listw(sp.matrix, style='W')
+
+moran.mc(grilla_caba_hurtos$hurtos, listw = sp.weights, nsim = 999)
+```
+
+El coeficiente que arrojó es 0.639, muy cercano a 1 lo cual implica que, al igual que los robos, los hurtos en la Ciudad no están distribuidos aleatoriamente sino que hay cierto patrón, es decir que la ocurrencia de un hurto no es igualmente probable en toda la Ciudad, hay lugares más propensos que otros y esto es estadísticamente significativo.  
+
+# ¿Comisarías disuasorias?
+
+Una vez encontrados que los delitos en la Ciudad no están aleatoriamente distribuidos (al menos los robos y los hurtos), podemos seguir profundizando el análisis y evaluar de qué modo las Comisarías actúan como elementos disuasorios de este tipo de delitos o no. La presencia de personal policial disuadiendo delitos es algo extensamente estudiado en la literatura, donde uno de los estudios más exponenciales es el de Rafael Di Tella y Ernesto Shargrodsky [Do Police Reduce Crime? Estimates using the allocation of Police Forces after a Terrorist Attack](https://www.aeaweb.org/articles?id=10.1257/000282804322970733).
+
+De un modo mucho más simple realizaremos un modelo de regresión lineal en el cual incluimos la distancia de los delitos a la comisaría más cercana para ver si a medida que aumenta la distancia disminuyen los mismos o no. Para ello nos valdremos de los datos agregados a nivel grilla que usamos para hacer el Test I de Moran. Cabe aclarar que se trata de un modelo extremadamente simple.
+
+El modelo tiene como variable dependiente la cantidad de delitos en la grilla y como variable independiente su distancia (en metros) a la comisaría más cercana, es decir la que teóricamente podría dar respuesta más rápido (en la realidad sabemos que esto no es así ya que las comisarías están distribuidas por zonas). 
+
+Empecemos modelando los robos.
+
+```{r}
+#Nos quedamos con los centroides de la grilla
+grilla_caba_robo_c <- st_point_on_surface(grilla_caba_robo)
+
+ggplot()+
+  geom_sf(data=grilla_caba_robo_c, aes(color=robo))
+
+comisarias<-read.csv("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/comisarias-policia-de-la-ciudad/comisarias-policia-de-la-ciudad.csv")
+
+comisarias <- comisarias %>% 
+  filter(!is.na(long), !is.na(lat)) %>% 
+  st_as_sf(coords = c("long", "lat"), crs = 4326)
+
+ggplot()+
+  geom_sf(data=grilla_caba_robo_c, aes(color=robo))+
+  geom_sf(data=comisarias, color="red", size=5)
+
+#Distancia centroides delitos a comisarias
+comisarias_grilla_robo <- st_join(grilla_caba_robo_c, comisarias, st_nearest_feature)
+
+#Agregamos una columna con la distancia y lo pasamos a numero
+comisarias_grilla_robo <- comisarias_grilla_robo %>% 
+  mutate(distancia=st_distance(grilla_caba_robo_c, comisarias[st_nearest_feature(grilla_caba_robo_c, comisarias),], by_element = TRUE)) %>% 
+  mutate(distancia=as.numeric(distancia))
+
+modelo_robo<- lm(robos~distancia, data=comisarias_grilla_robo)
+summary(modelo_robo)
+```
+
+En primer lugar cabe destacar que el coeficiente del predictor es estadísticamente significativo, sin embargo el hallazgo es contraintuitivo ya que a medida que aumenta la distancia los robos parecen disminuir. Puntalmente por cada 100 metros se esperaría una disminución de 6 delitos en la grilla. Asimismo cabe destacar que el poder explicativo de esta variable independiente es bajo, de apenas un 13%.  
+
+Y ahora armamos el mismo modelo pero para los hurtos.
+
+```{r}
+#Nos quedamos con los centroides de la grilla
+grilla_caba_hurtos_c <- st_point_on_surface(grilla_caba_hurtos)
+
+ggplot()+
+  geom_sf(data=grilla_caba_hurtos_c, aes(color=hurtos))
+
+ggplot()+
+  geom_sf(data=grilla_caba_hurtos_c, aes(color=hurtos))+
+  geom_sf(data=comisarias, color="red", size=5)
+
+#Distancia centroides delitos a comisarias
+comisarias_grilla_hurtos <- st_join(grilla_caba_hurtos_c, comisarias, st_nearest_feature)
+
+#Agregamos una columna con la distancia y lo pasamos a numero
+comisarias_grilla_hurtos <- comisarias_grilla_hurtos %>% 
+  mutate(distancia=st_distance(grilla_caba_hurtos_c, comisarias[st_nearest_feature(grilla_caba_hurtos_c, comisarias),], by_element = TRUE)) %>% 
+  mutate(distancia=as.numeric(distancia))
+
+modelo_hurtos<- lm(hurtos~distancia, data=comisarias_grilla_hurtos)
+summary(modelo_hurtos)
+```
+
+Al igual que en el modelo anterior el predictor es estadísticamente significativo y contraintuitivo, a más distancia menos delitos pero algo menor en este caso. A medida que nos alejamos 100 metros de la comisaría se esperaría una disminución de 4 hurtos en la grilla. El poder explicativo sigue siendo bajo, de apenas el 13% también.
+
+# Conclusiones
+
+A partir de los datos publicados de los delitos en la Ciudad es posible afirmar que hay zonas de mayor concentración que otras y que esto no se da de un modo azaroso, aleatorio sino que hay autocorrelación espacial. Esto significa que los delitos (robos y hurtos en este caso) no tienen igual probabilidad de ocurrir en toda la Ciudad, hay zonas más propensas que otras. Las avenidas y zonas de alta concentración de gente son claros atractores de delitos mientras que del modelo estadístico (otra vez, excesivamente simplista) el efecto disuasorio de las comisarías es inverso al esperado, a medida que nos alejamos se esperarían menos robos y hurtos!
